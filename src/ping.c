@@ -60,6 +60,10 @@ int unpack(char *buf, int len);
 
 void tv_sub(struct timeval *out, struct timeval *in);
 
+int bits_to_dec(int *bits, int len);
+
+void get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_of_hosts);
+
 void statistics(int signo)
 {
     printf("\n--------------------PING statistics-------------------\n");
@@ -216,15 +220,47 @@ int bits_to_dec(int *bits, int len)
     return result;
 }
 
+// Function to set the kth bit of n
+int set_bit(int n, int k)
+{
+    return (n | (1 << (k - 1)));
+}
+
+uint32_t get_subnet_bits(int subnet_bits)
+{
+    uint32_t bits = 0;
+    for (int i = 0; i < subnet_bits; i++)
+    {
+        bits |= 1UL << i;
+    }
+    return bits;
+}
+
+int cidr_to_ip_and_mask(const char *cidr, uint32_t *ip, uint32_t *mask)
+{
+    uint8_t a, b, c, d, bits;
+    if (sscanf(cidr, "%hhu.%hhu.%hhu.%hhu/%hhu", &a, &b, &c, &d, &bits) < 5)
+    {
+        return -1; /* didn't convert enough of CIDR */
+    }
+    if (bits > 32)
+    {
+        return -1; /* Invalid bit count */
+    }
+    *ip = (a << 24UL) | (b << 16UL) | (c << 8UL) | (d);
+    *mask = (0xFFFFFFFFUL << (32 - bits)) & 0xFFFFFFFFUL;
+}
+
 void get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_of_hosts)
 {
-    char *token = strtok(net_ip_and_subnet_bits, "/");
-    char *network_ip = strdup(token);
-    token = strtok(NULL, "/");
-    int subnet_bits = atoi(token);
-    
-    int num_of_hosts = pow(2, 32 - subnet_bits) - 2;
-    *result_num_of_hosts = num_of_hosts;
+    uint32_t ip;
+    uint32_t mask;
+    uint32_t first_ip;
+    if (cidr_to_ip_and_mask(net_ip_and_subnet_bits, &ip, &mask) < 0)
+    {
+        first_ip = ip & mask;
+    }
+    printf("Hello");
 }
 
 int main(int argc, char *argv[])
@@ -270,7 +306,7 @@ int main(int argc, char *argv[])
         memcpy((char *)&dest_addr.sin_addr, host->h_addr, host->h_length);
     }
     else
-        dest_addr.sin_addr.s_addr = inet_addr(argv[1]);
+        dest_addr.sin_addr.s_addr = inet_addr(argv[1]); // Convert argv[1] to in_addr_t
 
     pid = getpid();
 
