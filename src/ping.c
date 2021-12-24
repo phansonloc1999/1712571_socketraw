@@ -13,6 +13,7 @@
   # ./out google.com */
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <signal.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -28,10 +29,10 @@
 #include <sys/time.h>
 
 #define PACKET_SIZE 4096
-
 #define MAX_WAIT_TIME 5
-
 #define MAX_NO_PACKETS 3
+#define MAX_IP_STR_LEN 16
+#define MAX_IP_BIT_LEN 32
 
 char sendpacket[PACKET_SIZE];
 char recvpacket[PACKET_SIZE];
@@ -60,17 +61,12 @@ int unpack(char *buf, int len);
 void tv_sub(struct timeval *out, struct timeval *in);
 
 void statistics(int signo)
-
 {
-
     printf("\n--------------------PING statistics-------------------\n");
-
     printf("%d packets transmitted, %d received , %%%d lost\n", nsend,
-
            nreceived, (nsend - nreceived) / nsend * 100);
 
     close(sockfd);
-
     exit(1);
 }
 
@@ -209,6 +205,28 @@ int unpack(char *buf, int len)
         return -1;
 }
 
+int bits_to_dec(int *bits, int len)
+{
+    int result = 0, j = 0;
+    for (int i = len - 1; i >= 0; i--)
+    {
+        result = result + bits[i] * pow(2, j);
+        j++;
+    }
+    return result;
+}
+
+void get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_of_hosts)
+{
+    char *token = strtok(net_ip_and_subnet_bits, "/");
+    char *network_ip = strdup(token);
+    token = strtok(NULL, "/");
+    int subnet_bits = atoi(token);
+    
+    int num_of_hosts = pow(2, 32 - subnet_bits) - 2;
+    *result_num_of_hosts = num_of_hosts;
+}
+
 int main(int argc, char *argv[])
 {
     struct hostent *host;
@@ -238,6 +256,9 @@ int main(int argc, char *argv[])
 
     bzero(&dest_addr, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
+
+    int num_of_hosts = 0;
+    get_all_host_ips(argv[1], &num_of_hosts);
 
     if (inaddr = inet_addr(argv[1]) == INADDR_NONE)
     {
