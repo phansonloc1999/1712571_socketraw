@@ -255,8 +255,9 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
         {
             host_ip = i & (mask + i);
             host_addr = inet_makeaddr(network_ip, host_ip);
-            host_addresses[i] = host_addr;
-        }        
+            host_addresses[i - 1] = host_addr;
+            printf("%s\n", inet_ntoa(host_addr));
+        }
         return host_addresses;
     }
     else
@@ -310,9 +311,9 @@ int main(int argc, char *argv[])
     // else
     //     dest_addr.sin_addr.s_addr = inet_addr(argv[1]);
 
-    dest_addr.sin_addr.s_addr = host_addresses[0].s_addr;
+    dest_addr.sin_addr.s_addr = host_addresses[1].s_addr;
 
-    printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(dest_addr.sin_addr), datalen);
+    printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(host_addresses[1]), datalen);
 
     send_packet();
     recv_packet();
