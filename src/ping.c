@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 
 #define PACKET_SIZE 4096
 #define MAX_WAIT_TIME 5
@@ -35,7 +36,7 @@ pid_t pid;
 struct sockaddr_in from;
 struct timeval timevrecv;
 
-FILE* outfile = NULL;
+FILE *outfile = NULL;
 
 void statistics(int signo);
 
@@ -54,9 +55,9 @@ int bits_to_dec(int *bits, int len);
 
 void statistics(int signo)
 {
-    printf("\n--------------------PING statistics-------------------\n");
-    printf("%d packets transmitted, %d received , %%%d lost\n", nsend, nreceived, (nsend - nreceived) / nsend * 100);
-    printf("\n");
+    // printf("\n--------------------PING statistics-------------------\n");
+    // printf("%d packets transmitted, %d received , %%%d lost\n", nsend, nreceived, (nsend - nreceived) / nsend * 100);
+    // printf("\n");
     close(sockfd);
 
     // If packets are sent and received => host up => record current destination address IP
@@ -65,7 +66,9 @@ void statistics(int signo)
     {
         fputs(inet_ntoa(dest_addr.sin_addr), outfile);
         fputs("\n", outfile);
-    }    
+    }
+
+    exit(0);
 }
 
 unsigned short cal_chksum(unsigned short *addr, int len)
@@ -153,7 +156,7 @@ void recv_packet()
     {
         // Wait 5 seconds to receive for each packets in nsend packet
         alarm(MAX_WAIT_TIME);
-        
+
         if ((n = recvfrom(sockfd, recvpacket, sizeof(recvpacket), 0, (struct sockaddr *)&from, &fromlen)) < 0)
         {
             if (errno == EINTR)
@@ -161,7 +164,7 @@ void recv_packet()
 
             // Bad socket descriptor indicates socket may be closed by statistics()
             // Stop calling recvfrom and return to main()
-            if (errno = EBADF) 
+            if (errno = EBADF)
                 return;
 
             continue;
@@ -202,9 +205,7 @@ int unpack(char *buf, int len)
         tv_sub(&timevrecv, tvsend);
         rtt = timevrecv.tv_sec * 1000 + timevrecv.tv_usec / 1000;
 
-        printf("%d byte from %s: icmp_seq=%u ttl=%d rtt=%.3f ms\n", len,
-
-               inet_ntoa(from.sin_addr), icmp->icmp_seq, ip->ip_ttl, rtt);
+        // printf("%d byte from %s: icmp_seq=%u ttl=%d rtt=%.3f ms\n", len, inet_ntoa(from.sin_addr), icmp->icmp_seq, ip->ip_ttl, rtt);
     }
     else
         return -1;
@@ -309,24 +310,32 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, ctrlc_handler);
 
+    datalen = 56;
+    nsend = 0, nreceived = 0;
     for (int i = 0; i < num_of_hosts; i++)
     {
-        datalen = 56;
-        nsend = 0, nreceived = 0;
-
-        dest_addr.sin_addr = host_addresses[i];
-
-        if ((sockfd = socket(AF_INET, SOCK_RAW, protocol->p_proto)) < 0)
+        if (fork() == 0)
         {
-            perror("socket error");
-            exit(1);
+            pid = getpid();
+
+            dest_addr.sin_addr = host_addresses[i];
+
+            if ((sockfd = socket(AF_INET, SOCK_RAW, protocol->p_proto)) < 0)
+            {
+                perror("socket error");
+                exit(1);
+            }
+            setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+
+            // printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(host_addresses[i]), datalen);
+
+            send_packet();
+            recv_packet();
         }
-        setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+    }
 
-        printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(host_addresses[i]), datalen);
-
-        send_packet();
-        recv_packet();
+    while (wait(NULL) > 0)
+    {
     }
 
     fclose(outfile);
