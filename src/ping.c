@@ -1,16 +1,3 @@
-// A simple Ping program to ping any address such as google.com in Linux
-// run program as : gcc -o ping ping.c
-//  then : ./ping google.com
-// can ping localhost addresses
-// see the RAW socket implementation
-/*.....Ping Application....*/
-/*   Note Run under root priveledges  */
-/*  On terminal
-  $ gcc -o out ping.c
-  $ sudo su
-  # ./out 127.0.0.1
-   OR
-  # ./out google.com */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -28,7 +15,6 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/time.h>
-#include <byteswap.h>
 
 #define PACKET_SIZE 4096
 #define MAX_WAIT_TIME 5
@@ -47,7 +33,9 @@ struct sockaddr_in dest_addr;
 pid_t pid;
 
 struct sockaddr_in from;
-struct timeval tvrecv;
+struct timeval timevrecv;
+
+FILE* outfile = NULL;
 
 void statistics(int signo);
 
@@ -70,6 +58,14 @@ void statistics(int signo)
     printf("%d packets transmitted, %d received , %%%d lost\n", nsend, nreceived, (nsend - nreceived) / nsend * 100);
     printf("\n");
     close(sockfd);
+
+    // If packets are sent and received => host up => record current destination address IP
+    // to outfile
+    if (nsend > 0 && nreceived > 0)
+    {
+        fputs(inet_ntoa(dest_addr.sin_addr), outfile);
+        fputs("\n", outfile);
+    }    
 }
 
 unsigned short cal_chksum(unsigned short *addr, int len)
@@ -170,7 +166,7 @@ void recv_packet()
 
             continue;
         }
-        gettimeofday(&tvrecv, NULL);
+        gettimeofday(&timevrecv, NULL);
 
         if (unpack(recvpacket, n) == -1)
             continue;
@@ -178,7 +174,7 @@ void recv_packet()
         nreceived++;
     }
 
-    statistics(0);
+    statistics(0); // Show statistics after receiving ICMP replies for all sent packets
 }
 
 int unpack(char *buf, int len)
@@ -203,8 +199,8 @@ int unpack(char *buf, int len)
     if ((icmp->icmp_type == ICMP_ECHOREPLY) && (icmp->icmp_id == pid))
     {
         tvsend = (struct timeval *)icmp->icmp_data;
-        tv_sub(&tvrecv, tvsend);
-        rtt = tvrecv.tv_sec * 1000 + tvrecv.tv_usec / 1000;
+        tv_sub(&timevrecv, tvsend);
+        rtt = timevrecv.tv_sec * 1000 + timevrecv.tv_usec / 1000;
 
         printf("%d byte from %s: icmp_seq=%u ttl=%d rtt=%.3f ms\n", len,
 
@@ -270,6 +266,13 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
     return NULL;
 }
 
+void ctrlc_handler(int signum)
+{
+    close(sockfd);
+    fclose(outfile);
+    exit(1);
+}
+
 int main(int argc, char *argv[])
 {
     struct hostent *host;
@@ -292,8 +295,19 @@ int main(int argc, char *argv[])
     bzero(&dest_addr, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
 
+    pid = getpid();
+
     int num_of_hosts = 0;
     struct in_addr *host_addresses = get_all_host_ips(argv[1], &num_of_hosts);
+
+    outfile = fopen("output.txt", "w");
+    if (outfile == NULL)
+    {
+        perror("Could not open output.txt file\n");
+        return -1;
+    }
+
+    signal(SIGINT, ctrlc_handler);
 
     for (int i = 0; i < num_of_hosts; i++)
     {
@@ -315,6 +329,7 @@ int main(int argc, char *argv[])
         recv_packet();
     }
 
+    fclose(outfile);
     return 0;
 }
 
