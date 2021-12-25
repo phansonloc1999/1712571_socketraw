@@ -13,6 +13,7 @@
   # ./out google.com */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <math.h>
 #include <signal.h>
 #include <arpa/inet.h>
@@ -63,11 +64,11 @@ void tv_sub(struct timeval *out, struct timeval *in);
 
 int bits_to_dec(int *bits, int len);
 
-void statistics()
+void statistics(int signo)
 {
     printf("\n--------------------PING statistics-------------------\n");
     printf("%d packets transmitted, %d received , %%%d lost\n", nsend, nreceived, (nsend - nreceived) / nsend * 100);
-    printf("\n\n\n");
+    printf("\n");
     close(sockfd);
 }
 
@@ -150,14 +151,23 @@ void recv_packet()
 
     fromlen = sizeof(from);
 
+    signal(SIGALRM, statistics);
+
     while (nreceived < nsend)
     {
+        // Wait 5 seconds to receive for each packets in nsend packet
+        alarm(MAX_WAIT_TIME);
+        
         if ((n = recvfrom(sockfd, recvpacket, sizeof(recvpacket), 0, (struct sockaddr *)&from, &fromlen)) < 0)
         {
             if (errno == EINTR)
                 continue;
 
-            perror("recvfrom error");
+            // Bad socket descriptor indicates socket may be closed by statistics()
+            // Stop calling recvfrom and return to main()
+            if (errno = EBADF) 
+                return;
+
             continue;
         }
         gettimeofday(&tvrecv, NULL);
@@ -167,6 +177,8 @@ void recv_packet()
 
         nreceived++;
     }
+
+    statistics(0);
 }
 
 int unpack(char *buf, int len)
@@ -301,7 +313,6 @@ int main(int argc, char *argv[])
 
         send_packet();
         recv_packet();
-        statistics();
     }
 
     return 0;
