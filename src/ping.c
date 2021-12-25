@@ -68,6 +68,7 @@ void statistics(int signo)
     printf("\n--------------------PING statistics-------------------\n");
     printf("%d packets transmitted, %d received , %%%d lost\n", nsend,
            nreceived, (nsend - nreceived) / nsend * 100);
+    printf("\n\n\n");
 
     close(sockfd);
     exit(1);
@@ -206,6 +207,8 @@ int unpack(char *buf, int len)
     }
     else
         return -1;
+
+    return 0;
 }
 
 int bits_to_dec(int *bits, int len)
@@ -236,29 +239,29 @@ int cidr_to_ip_and_mask(const char *cidr, uint32_t *ip, uint32_t *mask)
     return 0;
 }
 
-struct in_addr* get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_of_hosts)
+struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_of_hosts)
 {
     uint32_t network_ip;
     uint32_t mask;
     uint32_t host_ip;
     if (cidr_to_ip_and_mask(net_ip_and_subnet_bits, &network_ip, &mask) == 0)
     {
-        
         *result_num_of_hosts = ~mask;
         size_t in_addr_size = sizeof(struct in_addr);
-        struct in_addr* host_addresses = (struct in_addr*)malloc(in_addr_size * *result_num_of_hosts);
+        int n = *result_num_of_hosts;
+        struct in_addr *host_addresses = (struct in_addr *)malloc(in_addr_size * n);
         struct in_addr host_addr;
-        for (int i = 1; i<(~mask); i++) {
+        for (int i = 1; i < (~mask); i++)
+        {
             host_ip = i & (mask + i);
             host_addr = inet_makeaddr(network_ip, host_ip);
             host_addresses[i] = host_addr;
-            char *buff = inet_ntoa(host_addresses[i]);
-            printf("%s\n", buff);
-        }
+        }        
         return host_addresses;
     }
-    else printf("[ERROR]: Failed to get host ips from CIDR");
-    
+    else
+        printf("[ERROR]: Failed to get host ips from CIDR");
+
     return NULL;
 }
 
@@ -293,12 +296,23 @@ int main(int argc, char *argv[])
     dest_addr.sin_family = AF_INET;
 
     int num_of_hosts = 0;
-    struct in_addr* host_addresses = get_all_host_ips(argv[1], &num_of_hosts);
+    struct in_addr *host_addresses = get_all_host_ips(argv[1], &num_of_hosts);
 
-    // Convert argv[1] from CIDR format to in_addr_t (uint32_t)
-    dest_addr.sin_addr.s_addr = inet_addr(argv[1]); 
+    // if (inaddr = inet_addr(argv[1]) == INADDR_NONE)
+    // {
+    //     if ((host = gethostbyname(argv[1])) == NULL)
+    //     {
+    //         perror("gethostbyname error");
+    //         exit(1);
+    //     }
+    //     memcpy((char *)&dest_addr.sin_addr, host->h_addr, host->h_length);
+    // }
+    // else
+    //     dest_addr.sin_addr.s_addr = inet_addr(argv[1]);
 
-    printf("PING %s(%s): %d bytes data in ICMP packets.\n", argv[1], inet_ntoa(dest_addr.sin_addr), datalen);
+    dest_addr.sin_addr.s_addr = host_addresses[0].s_addr;
+
+    printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(dest_addr.sin_addr), datalen);
 
     send_packet();
     recv_packet();
