@@ -63,15 +63,12 @@ void tv_sub(struct timeval *out, struct timeval *in);
 
 int bits_to_dec(int *bits, int len);
 
-void statistics(int signo)
+void statistics()
 {
     printf("\n--------------------PING statistics-------------------\n");
-    printf("%d packets transmitted, %d received , %%%d lost\n", nsend,
-           nreceived, (nsend - nreceived) / nsend * 100);
+    printf("%d packets transmitted, %d received , %%%d lost\n", nsend, nreceived, (nsend - nreceived) / nsend * 100);
     printf("\n\n\n");
-
     close(sockfd);
-    exit(1);
 }
 
 unsigned short cal_chksum(unsigned short *addr, int len)
@@ -151,14 +148,10 @@ void recv_packet()
     socklen_t fromlen;
     extern int errno;
 
-    signal(SIGALRM, statistics);
-
     fromlen = sizeof(from);
 
     while (nreceived < nsend)
     {
-        alarm(MAX_WAIT_TIME);
-
         if ((n = recvfrom(sockfd, recvpacket, sizeof(recvpacket), 0, (struct sockaddr *)&from, &fromlen)) < 0)
         {
             if (errno == EINTR)
@@ -256,7 +249,6 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
             host_ip = i & (mask + i);
             host_addr = inet_makeaddr(network_ip, host_ip);
             host_addresses[i - 1] = host_addr;
-            printf("%s\n", inet_ntoa(host_addr));
         }
         return host_addresses;
     }
@@ -285,39 +277,32 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if ((sockfd = socket(AF_INET, SOCK_RAW, protocol->p_proto)) < 0)
-    {
-        perror("socket error");
-        exit(1);
-    }
-
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
-
     bzero(&dest_addr, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
 
     int num_of_hosts = 0;
     struct in_addr *host_addresses = get_all_host_ips(argv[1], &num_of_hosts);
 
-    // if (inaddr = inet_addr(argv[1]) == INADDR_NONE)
-    // {
-    //     if ((host = gethostbyname(argv[1])) == NULL)
-    //     {
-    //         perror("gethostbyname error");
-    //         exit(1);
-    //     }
-    //     memcpy((char *)&dest_addr.sin_addr, host->h_addr, host->h_length);
-    // }
-    // else
-    //     dest_addr.sin_addr.s_addr = inet_addr(argv[1]);
+    for (int i = 0; i < num_of_hosts; i++)
+    {
+        datalen = 56;
+        nsend = 0, nreceived = 0;
 
-    dest_addr.sin_addr.s_addr = host_addresses[1].s_addr;
+        dest_addr.sin_addr = host_addresses[i];
 
-    printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(host_addresses[1]), datalen);
+        if ((sockfd = socket(AF_INET, SOCK_RAW, protocol->p_proto)) < 0)
+        {
+            perror("socket error");
+            exit(1);
+        }
+        setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
 
-    send_packet();
-    recv_packet();
-    statistics(SIGALRM);
+        printf("PING %s: %d bytes data in ICMP packets.\n", inet_ntoa(host_addresses[i]), datalen);
+
+        send_packet();
+        recv_packet();
+        statistics();
+    }
 
     return 0;
 }
