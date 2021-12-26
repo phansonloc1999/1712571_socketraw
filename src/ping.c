@@ -294,10 +294,10 @@ int main(int argc, char *argv[])
     int num_of_hosts = 0;
     struct in_addr *host_addresses = get_all_host_ips(argv[1], &num_of_hosts);
 
-    outfile = fopen("output.txt", "w");
+    outfile = fopen("1712571.txt", "w");
     if (outfile == NULL)
     {
-        perror("Could not open output.txt file\n");
+        perror("Could not open 1712571.txt file\n");
         return -1;
     }
 
