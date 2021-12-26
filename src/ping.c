@@ -213,17 +213,6 @@ int unpack(char *buf, int len)
     return 0;
 }
 
-int bits_to_dec(int *bits, int len)
-{
-    int result = 0, j = 0;
-    for (int i = len - 1; i >= 0; i--)
-    {
-        result = result + bits[i] * pow(2, j);
-        j++;
-    }
-    return result;
-}
-
 int cidr_to_ip_and_mask(const char *cidr, uint32_t *ip, uint32_t *mask)
 {
     uint8_t a, b, c, d, bits;
@@ -248,7 +237,7 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
     uint32_t host_ip;
     if (cidr_to_ip_and_mask(net_ip_and_subnet_bits, &network_ip, &mask) == 0)
     {
-        *result_num_of_hosts = ~mask;
+        *result_num_of_hosts = ~mask - 1;
         size_t in_addr_size = sizeof(struct in_addr);
         int n = *result_num_of_hosts;
         struct in_addr *host_addresses = (struct in_addr *)malloc(in_addr_size * n);
@@ -256,7 +245,7 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
         for (int i = 1; i < (~mask); i++)
         {
             host_ip = i & (mask + i);
-            host_addr = inet_makeaddr(network_ip, host_ip);
+            host_addr = inet_makeaddr(network_ip, host_ip); // Combine network ip with host number 
             host_addresses[i - 1] = host_addr;
         }
         return host_addresses;
@@ -320,6 +309,7 @@ int main(int argc, char *argv[])
 
             dest_addr.sin_addr = host_addresses[i];
 
+            close(sockfd);        
             if ((sockfd = socket(AF_INET, SOCK_RAW, protocol->p_proto)) < 0)
             {
                 perror("socket error");
