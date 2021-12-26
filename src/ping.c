@@ -256,13 +256,6 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
     return NULL;
 }
 
-void ctrlc_handler(int signum)
-{
-    close(sockfd);
-    fclose(outfile);
-    exit(1);
-}
-
 int main(int argc, char *argv[])
 {
     struct hostent *host;
@@ -273,7 +266,8 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        printf("usage:%s hostname/IP address\n", argv[0]);
+        printf("usage:%s Network IP/Subnet bits\n", argv[0]);
+        printf("Example:%s 192.168.1.0/24\n", argv[0]);
         exit(1);
     }
     if ((protocol = getprotobyname("icmp")) == NULL)
@@ -297,7 +291,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    signal(SIGINT, ctrlc_handler);
+    int 
 
     datalen = 56;
     nsend = 0, nreceived = 0;
