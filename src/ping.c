@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -11,11 +12,14 @@
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <netdb.h>
-#include <setjmp.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <ifaddrs.h>
+#include <linux/if_link.h>
 
 #define PACKET_SIZE 4096
 #define MAX_WAIT_TIME 5
@@ -37,6 +41,9 @@ struct sockaddr_in from;
 struct timeval timevrecv;
 
 FILE *outfile = NULL;
+
+int num_of_if_addresses = 0;
+char **if_addresses = NULL;
 
 void statistics(int signo);
 
@@ -64,7 +71,16 @@ void statistics(int signo)
     // to outfile
     if (nsend > 0 && nreceived > 0)
     {
-        fputs(inet_ntoa(dest_addr.sin_addr), outfile);
+        char* dest_address = inet_ntoa(dest_addr.sin_addr);
+        for (int i = 0; i < num_of_if_addresses; i++)
+        {
+            if (strcmp(dest_address, if_addresses[i]) == 0)
+            {
+                exit(0);
+            }
+        }
+        
+        fputs(dest_address, outfile);
         fputs("\n", outfile);
     }
 
@@ -245,7 +261,7 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
         for (int i = 1; i < (~mask); i++)
         {
             host_ip = i & (mask + i);
-            host_addr = inet_makeaddr(network_ip, host_ip); // Combine network ip with host number 
+            host_addr = inet_makeaddr(network_ip, host_ip); // Combine network ip with host number
             host_addresses[i - 1] = host_addr;
         }
         return host_addresses;
@@ -256,13 +272,67 @@ struct in_addr *get_all_host_ips(char *net_ip_and_subnet_bits, int *result_num_o
     return NULL;
 }
 
+char **get_if_addrs(int *num_of_if_address)
+{
+    struct ifaddrs *ifaddr;
+    int family, s;
+    char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1)
+    {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
+    }
+
+    char **if_addresses = (char **)malloc(sizeof(char *));
+    for (int i = 0; i < 10; i++)
+    {
+        if_addresses[i] = (char *)calloc(1025, 1);
+    }
+
+    /* Walk through linked list, maintaining head pointer so we
+       can free list later. */
+
+    int i = 0;
+    int count = 0;
+    for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+    {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        family = ifa->ifa_addr->sa_family;
+
+        if (family == AF_INET)
+        {
+            s = getnameinfo(ifa->ifa_addr,
+                            (family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6),
+                            host, NI_MAXHOST,
+                            NULL, 0, NI_NUMERICHOST);
+            if (s != 0)
+            {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                exit(EXIT_FAILURE);
+            }
+
+            // printf("\t\taddress: <%s>\n", host);
+            if_addresses[i] = strcpy(if_addresses[i], host);
+            i++;
+            count++;
+        }
+    }
+
+    freeifaddrs(ifaddr);
+
+    *num_of_if_address = count;
+    return if_addresses;
+}
+
 int main(int argc, char *argv[])
 {
-    struct hostent *host;
     struct protoent *protocol;
-    unsigned long inaddr = 0l;
-    int waittime = MAX_WAIT_TIME;
     int size = 50 * 1024;
+
+    if_addresses = get_if_addrs(&num_of_if_addresses);
 
     if (argc < 2)
     {
@@ -291,9 +361,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int 
-
-    datalen = 56;
+    int datalen = 56;
     nsend = 0, nreceived = 0;
     for (int i = 0; i < num_of_hosts; i++)
     {
@@ -303,7 +371,7 @@ int main(int argc, char *argv[])
 
             dest_addr.sin_addr = host_addresses[i];
 
-            close(sockfd);        
+            close(sockfd);
             if ((sockfd = socket(AF_INET, SOCK_RAW, protocol->p_proto)) < 0)
             {
                 perror("socket error");
